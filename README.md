@@ -1,5 +1,7 @@
 # interactVis
 
+WORK IN PROGRESS
+
 Scripts used to perform my own neighbourhood analysis of 10X Visium spatial transcriptomics data.
 
 The aim of the neighbourhood analysis is to find adjacent tissue spots where there is co-expression of receptors and ligands.
