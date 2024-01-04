@@ -4,7 +4,7 @@
 
 ## :dart: Aim
 - Perform receptor-ligand interaction analysis of 10X Visium spatial transcriptomics data - hence - interactVis
-- Find adjacent tissue spots where there is co-expression of receptors and ligands.
+- Find adjacent tissue spots where there is co-expression of receptors and ligands
 
 ## :pencil: Scripts
 - loadDB.R contains a function to load the database from the cellphonedb package. The database contains complex and ligand pairs.
