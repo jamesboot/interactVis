@@ -105,30 +105,43 @@ p4 <- SpatialPlot(dat, group.by = 'Cluster', label.size = 10) +
 p4
 
 # Annotate the Interactions results with the cluster for spot 1 and spot 2
-interactions$Interactions$Spot1_Cluster <- NA
-interactions$Interactions$Spot2_Cluster <- NA
-for (x in 1:nrow(interactions$Interactions)) {
-  interactions$Interactions$Spot1_Cluster[x] <-
-    partekMetaFilt$Clusters..5comp.0.75res[partekMetaFilt$Cell.name == interactions$Interactions$spot1[x]]
-  interactions$Interactions$Spot2_Cluster[x] <-
-    partekMetaFilt$Clusters..5comp.0.75res[partekMetaFilt$Cell.name == interactions$Interactions$spot2[x]]
+# Create new df for this
+diffIntDF <- interactions$Interactions
+diffIntDF$Spot1_Cluster <- NA
+diffIntDF$Spot2_Cluster <- NA
+for (x in 1:nrow(diffIntDF)) {
+  diffIntDF$Spot1_Cluster[x] <-
+    partekMetaFilt$Clusters..5comp.0.75res[partekMetaFilt$Cell.name == diffIntDF$spot1[x]]
+  diffIntDF$Spot2_Cluster[x] <-
+    partekMetaFilt$Clusters..5comp.0.75res[partekMetaFilt$Cell.name == diffIntDF$spot2[x]]
 }
-View(interactions$Interactions)
+View(diffIntDF)
 
 # Merge the cluster columns to make a new category
-interactions$Interactions <- interactions$Interactions %>%
+diffIntDF <- diffIntDF %>%
   mutate(Cluster_Interaction = paste0(Spot1_Cluster, '+', Spot2_Cluster))
-View(interactions$Interactions)
-unique(interactions$Interactions$Cluster_Interaction)
+View(diffIntDF)
 
-# Remove Cluster_Interaction rows which have 3 or fewer occurrences
-interactions_filt <- interactions$Interactions %>%
+# How many of each Cluster_Interaction combincations are there?
+interactionSum <- diffIntDF %>%
   group_by(Cluster_Interaction) %>%
-  filter(n() >= 3)
+  summarise(n = n())
+View(interactionSum)
+
+# How many spots in each cluster
+clusterSum <- dat@meta.data %>%
+  group_by(Cluster) %>%
+  summarise(n = n())
+View(clusterSum)
+
+# Remove Cluster_Interaction rows which have 10 or fewer occurrences
+diffIntDF_filt <- diffIntDF %>%
+  group_by(Cluster_Interaction) %>%
+  filter(n() >= 10)
 
 # Plot interaction scores box plot
 p5 <-
-  ggplot(interactions_filt,
+  ggplot(diffIntDF_filt,
          aes(x = Cluster_Interaction, y = interaction_score)) +
   geom_boxplot(outlier.shape = NA) +
   theme(axis.text.x = element_text(
@@ -146,27 +159,27 @@ ggsave(
 )
 
 # Is data normally distributed?
-qqnorm(interactions_filt$interaction_score)
-qqline(interactions_filt$interaction_score)
+qqnorm(diffIntDF_filt$interaction_score)
+qqline(diffIntDF_filt$interaction_score)
 
 # Descriptive stats
 stats <- aggregate(interaction_score ~ Cluster_Interaction,
-                   data = interactions_filt,
+                   data = diffIntDF_filt,
                    function(x)
                      round(c(mean = mean(x), sd = sd(x)), 2))
 
 # Ensure Cluster_Interaction is a factor
-interactions_filt$Cluster_Interaction <- 
-  as.factor(interactions_filt$Cluster_Interaction)
+diffIntDF_filt$Cluster_Interaction <- 
+  as.factor(diffIntDF_filt$Cluster_Interaction)
 
 # Lets compare the interaction scores in two different clusters 
 # Use Welchs ANOVA as not normally distributed 
 res_aov1 <- oneway.test(interaction_score ~ Cluster_Interaction,
-                        data = interactions_filt,
+                        data = diffIntDF_filt,
                         var.equal = FALSE)
 
 res_aov2 <- aov(interaction_score ~ Cluster_Interaction,
-                data = interactions_filt)
+                data = diffIntDF_filt)
 summary(res_aov2)
 
 # If there is a difference perform Tukeys post hoc test
@@ -176,6 +189,6 @@ plot(TukeyHSD(res_aov2, conf.level=.99), las = 2)
 
 # Extract significant results 
 post_test_df <- as.data.frame(post_test$Cluster_Interaction)
-post_test_df_filt <- post_test_df[post_test_df$`p adj` < 0.01, ]
+post_test_df_filt <- post_test_df[post_test_df$`p adj` < 0.0001, ]
 
 
