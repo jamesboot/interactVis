@@ -1,12 +1,25 @@
-# Script to try calculating interaction scores as part of the interactVis package
-
-# Set working directory
-setwd('/Users/jamesboot/Documents/9.Genome Centre Files/GC-TM-10271/interactVis_trial/')
+# Script for implementing, testing and developing interactVis functions
 
 # Load libraries
 library(Seurat)
 library(ggplot2)
 library(dplyr)
+library(multcomp)
+
+# Load functions
+source('interactVis/findNeighbours.R')
+source('interactVis/loadDB.R')
+source('interactVis/findInteractions.R')
+
+# Load database
+database <- loadDB(gene.input = 'interactVis/cellphonedb-data-4.0.0/data/gene_input_all.csv',
+                   complex.input = 'interactVis/cellphonedb-data-4.0.0/data/complex_input.csv',
+                   interaction.input = 'interactVis/cellphonedb-data-4.0.0/data/interaction_input.csv')
+
+# Start analysis on test data set from project GC-TM-10271
+
+# Change working directory
+setwd('/Users/jamesboot/Documents/9.Genome Centre Files/GC-TM-10271/interactVis_trial/')
 
 # Load spatial data
 data.dir <- '/Users/jamesboot/Documents/9.Genome Centre Files/GC-TM-10271/4 Runs Combined/spatial/NH12-297_spatial/'
@@ -36,18 +49,8 @@ dat <- subset(dat, cells = selectedSpots$`Cell name`[selectedSpots$`Sample name`
 #dat <- SCTransform(dat, assay = "Spatial", verbose = FALSE)
 dat <- NormalizeData(dat, normalization.method = "LogNormalize", verbose = FALSE)
 
-# Load custom functions for InteractVis
-source('findNeighbours.R')
-source('loadDB.R')
-source('findInteractions.R')
-
 # Find neighbors 
 neighbours <- findNeighbours(paste0(data.dir, 'spatial/tissue_positions.csv'))
-
-# Load database
-database <- loadDB(gene.input = 'cellphonedb-data-4.0.0/data/gene_input_all.csv',
-                   complex.input = 'cellphonedb-data-4.0.0/data/complex_input.csv',
-                   interaction.input = 'cellphonedb-data-4.0.0/data/interaction_input.csv')
 
 # Find interactions
 interactions <- calculateInteractions(neighboursList = neighbours,
@@ -58,7 +61,7 @@ interactions <- calculateInteractions(neighboursList = neighbours,
 # DATA VISUALISATION ----
 
 # Extract all spots enriched for top occurring complex interaction
-coi <- interactions$Complex_Summary$spot1_complex[1]
+coi <- interactions$Complex_Summary$spot1_complex[2]
 spots <- unique(c(interactions$Interactions$spot1[interactions$Interactions$spot1_complex == coi],
                   interactions$Interactions$spot2[interactions$Interactions$spot1_complex == coi]))
 
@@ -104,13 +107,75 @@ p4
 # Annotate the Interactions results with the cluster for spot 1 and spot 2
 interactions$Interactions$Spot1_Cluster <- NA
 interactions$Interactions$Spot2_Cluster <- NA
-for (x in 1:nrow(test)) {
-  interactions$Interactions$Spot1_Cluster[x] <- 
+for (x in 1:nrow(interactions$Interactions)) {
+  interactions$Interactions$Spot1_Cluster[x] <-
     partekMetaFilt$Clusters..5comp.0.75res[partekMetaFilt$Cell.name == interactions$Interactions$spot1[x]]
-  interactions$Interactions$Spot2_Cluster[x] <- 
+  interactions$Interactions$Spot2_Cluster[x] <-
     partekMetaFilt$Clusters..5comp.0.75res[partekMetaFilt$Cell.name == interactions$Interactions$spot2[x]]
 }
 View(interactions$Interactions)
 
+# Merge the cluster columns to make a new category
+interactions$Interactions <- interactions$Interactions %>%
+  mutate(Cluster_Interaction = paste0(Spot1_Cluster, '+', Spot2_Cluster))
+View(interactions$Interactions)
+unique(interactions$Interactions$Cluster_Interaction)
+
+# Remove Cluster_Interaction rows which have 3 or fewer occurrences
+interactions_filt <- interactions$Interactions %>%
+  group_by(Cluster_Interaction) %>%
+  filter(n() >= 3)
+
+# Plot interaction scores box plot
+p5 <-
+  ggplot(interactions_filt,
+         aes(x = Cluster_Interaction, y = interaction_score)) +
+  geom_boxplot(outlier.shape = NA) +
+  theme(axis.text.x = element_text(
+    angle = 90,
+    vjust = 0.5,
+    hjust = 1
+  ))
+ggsave(
+  'score_boxplot.tiff',
+  plot = p5,
+  width = 20,
+  height = 10,
+  units = 'in',
+  dpi = 300
+)
+
+# Is data normally distributed?
+qqnorm(interactions_filt$interaction_score)
+qqline(interactions_filt$interaction_score)
+
+# Descriptive stats
+stats <- aggregate(interaction_score ~ Cluster_Interaction,
+                   data = interactions_filt,
+                   function(x)
+                     round(c(mean = mean(x), sd = sd(x)), 2))
+
+# Ensure Cluster_Interaction is a factor
+interactions_filt$Cluster_Interaction <- 
+  as.factor(interactions_filt$Cluster_Interaction)
+
 # Lets compare the interaction scores in two different clusters 
-#
+# Use Welchs ANOVA as not normally distributed 
+res_aov1 <- oneway.test(interaction_score ~ Cluster_Interaction,
+                        data = interactions_filt,
+                        var.equal = FALSE)
+
+res_aov2 <- aov(interaction_score ~ Cluster_Interaction,
+                data = interactions_filt)
+summary(res_aov2)
+
+# If there is a difference perform Tukeys post hoc test
+# Tukey HSD test:
+post_test <- TukeyHSD(res_aov2, conf.level = 0.99)
+plot(TukeyHSD(res_aov2, conf.level=.99), las = 2)
+
+# Extract significant results 
+post_test_df <- as.data.frame(post_test$Cluster_Interaction)
+post_test_df_filt <- post_test_df[post_test_df$`p adj` < 0.01, ]
+
+
