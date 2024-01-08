@@ -3,6 +3,8 @@ loadDB <- function(gene.input,
                    complex.input,
                    interaction.input) {
   
+  message('Loading database...')
+  
   # Create blank list
   cellphonedb <- list()
   
@@ -65,7 +67,7 @@ loadDB <- function(gene.input,
     }
   }
   
-  
+  message('Done!')
   
   return(cellphonedb)
   

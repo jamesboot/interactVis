@@ -3,6 +3,8 @@
 # Create function
 findNeighbours <- function(file) {
   
+  message('Finding neighbours...')
+  
   # Read in CSV
   tissue_pos <- read.csv(file)
   
@@ -29,6 +31,7 @@ findNeighbours <- function(file) {
   names(neighbours) <- tissue_pos$barcode
   
   # Return the neighbours list
+  message('Done!')
   return(neighbours)
   
 }

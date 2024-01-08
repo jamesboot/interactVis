@@ -8,15 +8,15 @@ calculateInteractions <- function(neighboursList,
                                   threshold) {
   
   # Create vector containing the barcodes that are in the neighbors list and in the data (i.e. actual tissue spots)
-  print('Creating vector of barcodes in neighbours list and in data object.')
+  message('Creating vector of barcodes in neighbours list and in data object.')
   select <- names(neighboursList)[names(neighboursList) %in% dat@assays$Spatial@counts@Dimnames[[2]]]
 
   # Get the scaled data in a dataframe
-  print('Extracting scaled data.')
+  message('Extracting scaled data.')
   scaledat <- as.data.frame(GetAssayData(object = dat, slot = "data"))
   
   # Filter the scaled data down to all genes in the database
-  print('Filtering scaled data down to all genes in the database.')
+  message('Filtering scaled data down to all genes in the database.')
   
   # Create a vector of all the genes in the database 
   db_elements <- unique(as.vector(unlist(database)))
@@ -38,7 +38,7 @@ calculateInteractions <- function(neighboursList,
   }
   
   # Now calculate the interaction scores ----
-  print('Calculating interaction scores...')
+  message('Processing barcodes...')
   
   # Create dummy dataframe
   dummy <- data.frame()
@@ -48,12 +48,13 @@ calculateInteractions <- function(neighboursList,
   # Ensure to add barcode1 to neighbors so it checks interaction within itself
   # Ensure that the neighbor barcodes are in the select vector!
   for (y in 1:length(select)) {
-    
+  
     bcode1 <- select[y]
     nbours <-
       c(neighboursList[[bcode1]]$neighbours[neighboursList[[bcode1]]$neighbours %in% select],
         bcode1)
-    print(paste0(
+  
+    message(paste0(
       'Starting barcode ',
       y,
       ' of ',
@@ -111,6 +112,7 @@ calculateInteractions <- function(neighboursList,
   }
   
   # Calculate interaction score
+  message('Calculating interaction scores.')
   dummy <-
     dummy %>%
     rowwise() %>%
@@ -120,14 +122,14 @@ calculateInteractions <- function(neighboursList,
     filter(!is.infinite(interaction_score))
   
   # Find mean and standard deviation of interaction scores
-  print('Calculating mean and STDEV of interaction scores.')
+  message('Calculating mean and STDEV of interaction scores.')
   mean_intscore <- mean(dummy$interaction_score)
   sd_intscore <- sd(dummy$interaction_score)
   
   # If filter == TRUE - filter to rows with interactions 'x' STDEVs greater than mean
   if (filter == TRUE) {
     
-    print('Filtering to interactions with scores 2 STDEVs greater than mean.')
+    message('Filtering to interactions with scores 2 STDEVs greater than mean.')
     dummy <- dummy[dummy$interaction_score > (mean_intscore+(threshold*sd_intscore)), ]
     
     # Sort by interaction score
@@ -136,7 +138,7 @@ calculateInteractions <- function(neighboursList,
     
   } else if (filter == FALSE) {
     
-    print('Not filtering interaction scores.')
+    message('Not filtering interaction scores.')
     
     # Sort by interaction score
     results <- dummy %>%
@@ -145,7 +147,7 @@ calculateInteractions <- function(neighboursList,
   }
 
   # Gather and return results
-  print('Returning results.')
+  message('Returning results.')
   
   # Count occurrences of different complexes in final results
   complex_counts <- results %>%

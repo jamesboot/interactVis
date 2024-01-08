@@ -6,6 +6,9 @@ library(ggplot2)
 library(dplyr)
 library(multcomp)
 
+# Change working directory
+setwd('/Users/jamesboot/Documents/GitHub/')
+
 # Load functions
 source('interactVis/findNeighbours.R')
 source('interactVis/loadDB.R')
