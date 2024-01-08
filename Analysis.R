@@ -152,6 +152,7 @@ p5 <-
     vjust = 0.5,
     hjust = 1
   ))
+p5
 ggsave(
   'score_boxplot.tiff',
   plot = p5,
