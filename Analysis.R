@@ -142,8 +142,17 @@ p5a <-
     angle = 90,
     vjust = 0.5,
     hjust = 1
-  ))
+  )) +
+  ggtitle('Total number of receptor-ligand interactions per cluster')
 p5a
+ggsave(
+  'n_interactions_cluster.tiff',
+  plot = p5a,
+  width = 20,
+  height = 10,
+  units = 'in',
+  dpi = 300
+)
 
 # Plot - What is the average interaction score per cluster, regardless of receptor-ligand?
 p5b <-
@@ -154,8 +163,17 @@ p5b <-
     angle = 90,
     vjust = 0.5,
     hjust = 1
-  ))
+  )) +
+  ggtitle('Average interaction score per cluster')
 p5b
+ggsave(
+  'av_interaction_score.tiff',
+  plot = p5b,
+  width = 20,
+  height = 10,
+  units = 'in',
+  dpi = 300
+)
 
 # Which receptor ligands have the most interactions across the tissue?
 recepLigSum <- diffIntDF  %>%
@@ -164,62 +182,71 @@ recepLigSum <- diffIntDF  %>%
   arrange(n)
 
 # Select the receptor ligand pair with most interactions across the tissue
-coi <- tail(recepLigSum$spot1_complex, n = 1)
+coi <- tail(recepLigSum$spot1_complex, n = 10)
 
-# Subset down to complex of interest and
-# Remove rows which have 10 or fewer occurrences for each cluster
-diffIntDF_filt <- diffIntDF %>%
-  filter(spot1_complex == coi) %>%
-  group_by(Spot1_Cluster) %>%
-  filter(n() >= 10)
-
-# Plot box plot of interaction scores for complex of interest across spot 1 clusters
-p5c <-
-  ggplot(diffIntDF_filt,
-         aes(x = Spot1_Cluster, y = interaction_score)) +
-  geom_boxplot(outlier.shape = NA) +
-  theme(axis.text.x = element_text(
-    angle = 90,
-    vjust = 0.5,
-    hjust = 1
-  ))
-p5c
-ggsave(
-  'score_boxplot.tiff',
-  plot = p5,
-  width = 20,
-  height = 10,
-  units = 'in',
-  dpi = 300
-)
-
-# Is data normally distributed?
-qqnorm(diffIntDF_filt$interaction_score)
-qqline(diffIntDF_filt$interaction_score)
-
-# Descriptive stats
-stats <- aggregate(interaction_score ~ Spot1_Cluster,
-                   data = diffIntDF_filt,
-                   function(x)
-                     round(c(mean = mean(x), sd = sd(x)), 2))
-
-# Lets compare the interaction scores in two different clusters 
-# Use Welchs ANOVA as not normally distributed 
-res_aov1 <- oneway.test(interaction_score ~ Spot1_Cluster,
-                        data = diffIntDF_filt,
-                        var.equal = FALSE)
-res_aov1
-res_aov2 <- aov(interaction_score ~ Spot1_Cluster,
-                data = diffIntDF_filt)
-summary(res_aov2)
-
-# If there is a difference perform Tukeys post hoc test
-# Tukey HSD test:
-post_test <- TukeyHSD(res_aov2, conf.level = 0.99)
-plot(TukeyHSD(res_aov2, conf.level=.99), las = 2)
-
-# Extract significant results 
-post_test_df <- as.data.frame(post_test$Spot1_Cluster)
-post_test_df_filt <- post_test_df[post_test_df$`p adj` < 0.01, ]
-
+# Go through complexes of interest in for loop
+for (x in coi) {
+  
+  # Subset down to complex of interest and
+  # Remove rows which have 10 or fewer occurrences for each cluster
+  diffIntDF_filt <- diffIntDF %>%
+    filter(spot1_complex == x) %>%
+    group_by(Spot1_Cluster) %>%
+    filter(n() >= 10)
+  
+  # Plot box plot of interaction scores for complex of interest across spot 1 clusters
+  p5c <-
+    ggplot(diffIntDF_filt,
+           aes(x = Spot1_Cluster, y = interaction_score)) +
+    geom_boxplot(outlier.shape = NA) +
+    theme(axis.text.x = element_text(
+      angle = 90,
+      vjust = 0.5,
+      hjust = 1
+    )) +
+    ggtitle(label = paste0(x, ' average interaction score per cluster'))
+  
+  # Save
+  ggsave(
+    filename = paste0(x, '_score_boxplot.tiff'),
+    plot = p5c,
+    width = 20,
+    height = 10,
+    units = 'in',
+    dpi = 300
+  )
+  
+  # # Is data normally distributed?
+  # qqnorm(diffIntDF_filt$interaction_score)
+  # qqline(diffIntDF_filt$interaction_score)
+  #
+  # # Descriptive stats
+  # stats <- aggregate(interaction_score ~ Spot1_Cluster,
+  #                    data = diffIntDF_filt,
+  #                    function(x)
+  #                      round(c(mean = mean(x), sd = sd(x)), 2))
+  
+  # Lets compare the interaction scores in two different clusters
+  # Use Welchs ANOVA as not normally distributed
+  res_aov1 <- oneway.test(interaction_score ~ Spot1_Cluster,
+                          data = diffIntDF_filt,
+                          var.equal = FALSE)
+  #res_aov1
+  res_aov2 <- aov(interaction_score ~ Spot1_Cluster,
+                  data = diffIntDF_filt)
+  #summary(res_aov2)
+  
+  # If there is a difference perform Tukeys post hoc test
+  # Tukey HSD test:
+  post_test <- TukeyHSD(res_aov2, conf.level = 0.99)
+  plot(TukeyHSD(res_aov2, conf.level = .99), las = 2)
+  
+  # Extract significant results
+  post_test_df <- as.data.frame(post_test$Spot1_Cluster)
+  post_test_df_filt <- post_test_df[post_test_df$`p adj` < 0.01,]
+  
+  # Save stats results
+  write.csv(post_test_df, file = paste0(x, '_tukeyHSD.csv'))
+  
+}
 
