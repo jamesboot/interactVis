@@ -79,7 +79,7 @@ new_meta$interaction1[!new_meta$barcodes %in% spots] <- 'None'
 row.names(new_meta) <- new_meta$barcodes
 new_meta$barcodes <- NULL
 
-# Add new meta data ot object
+# Add new meta data to object
 dat <- AddMetaData(dat, new_meta)
 
 # Visualise the new meta data along with genes and receptors of the complex
@@ -120,39 +120,70 @@ for (x in 1:nrow(diffIntDF)) {
 }
 View(diffIntDF)
 
-# Merge the cluster columns to make a new category
-diffIntDF <- diffIntDF %>%
-  mutate(Cluster_Interaction = paste0(Spot1_Cluster, '+', Spot2_Cluster))
-View(diffIntDF)
+# Ensure Spot1_Cluster and Spot2 Cluster are factors
+diffIntDF$Spot1_Cluster <- as.factor(diffIntDF$Spot1_Cluster)
+diffIntDF$Spot2_Cluster <- as.factor(diffIntDF$Spot2_Cluster)
 
-# How many of each Cluster_Interaction combincations are there?
+# Interactions will be annotated with spot 1 cluster
+# Because spot1 is where the receptor expression is taken from (i.e. the actuator of signalling) 
+
+# How many of each interactions per cluster are there?
 interactionSum <- diffIntDF %>%
-  group_by(Cluster_Interaction) %>%
+  group_by(Spot1_Cluster) %>%
   summarise(n = n())
 View(interactionSum)
 
-# How many spots in each cluster
-clusterSum <- dat@meta.data %>%
-  group_by(Cluster) %>%
-  summarise(n = n())
-View(clusterSum)
+# Plot - How many total interactions does each cluster have, regardless of receptor-ligand?
+p5a <-
+  ggplot(interactionSum,
+         aes(x = Spot1_Cluster, y = n)) +
+  geom_bar(stat = 'identity') +
+  theme(axis.text.x = element_text(
+    angle = 90,
+    vjust = 0.5,
+    hjust = 1
+  ))
+p5a
 
-# Remove Cluster_Interaction rows which have 10 or fewer occurrences
-diffIntDF_filt <- diffIntDF %>%
-  group_by(Cluster_Interaction) %>%
-  filter(n() >= 10)
-
-# Plot interaction scores box plot
-p5 <-
-  ggplot(diffIntDF_filt,
-         aes(x = Cluster_Interaction, y = interaction_score)) +
+# Plot - What is the average interaction score per cluster, regardless of receptor-ligand?
+p5b <-
+  ggplot(diffIntDF,
+         aes(x = Spot1_Cluster, y = interaction_score)) +
   geom_boxplot(outlier.shape = NA) +
   theme(axis.text.x = element_text(
     angle = 90,
     vjust = 0.5,
     hjust = 1
   ))
-p5
+p5b
+
+# Which receptor ligands have the most interactions across the tissue?
+recepLigSum <- diffIntDF  %>%
+  group_by(spot1_complex) %>%
+  summarise(n = n()) %>%
+  arrange(n)
+
+# Select the receptor ligand pair with most interactions across the tissue
+coi <- tail(recepLigSum$spot1_complex, n = 1)
+
+# Subset down to complex of interest and
+# Remove rows which have 10 or fewer occurrences for each cluster
+diffIntDF_filt <- diffIntDF %>%
+  filter(spot1_complex == coi) %>%
+  group_by(Spot1_Cluster) %>%
+  filter(n() >= 10)
+
+# Plot box plot of interaction scores for complex of interest across spot 1 clusters
+p5c <-
+  ggplot(diffIntDF_filt,
+         aes(x = Spot1_Cluster, y = interaction_score)) +
+  geom_boxplot(outlier.shape = NA) +
+  theme(axis.text.x = element_text(
+    angle = 90,
+    vjust = 0.5,
+    hjust = 1
+  ))
+p5c
 ggsave(
   'score_boxplot.tiff',
   plot = p5,
@@ -167,22 +198,18 @@ qqnorm(diffIntDF_filt$interaction_score)
 qqline(diffIntDF_filt$interaction_score)
 
 # Descriptive stats
-stats <- aggregate(interaction_score ~ Cluster_Interaction,
+stats <- aggregate(interaction_score ~ Spot1_Cluster,
                    data = diffIntDF_filt,
                    function(x)
                      round(c(mean = mean(x), sd = sd(x)), 2))
 
-# Ensure Cluster_Interaction is a factor
-diffIntDF_filt$Cluster_Interaction <- 
-  as.factor(diffIntDF_filt$Cluster_Interaction)
-
 # Lets compare the interaction scores in two different clusters 
 # Use Welchs ANOVA as not normally distributed 
-res_aov1 <- oneway.test(interaction_score ~ Cluster_Interaction,
+res_aov1 <- oneway.test(interaction_score ~ Spot1_Cluster,
                         data = diffIntDF_filt,
                         var.equal = FALSE)
-
-res_aov2 <- aov(interaction_score ~ Cluster_Interaction,
+res_aov1
+res_aov2 <- aov(interaction_score ~ Spot1_Cluster,
                 data = diffIntDF_filt)
 summary(res_aov2)
 
@@ -192,7 +219,7 @@ post_test <- TukeyHSD(res_aov2, conf.level = 0.99)
 plot(TukeyHSD(res_aov2, conf.level=.99), las = 2)
 
 # Extract significant results 
-post_test_df <- as.data.frame(post_test$Cluster_Interaction)
-post_test_df_filt <- post_test_df[post_test_df$`p adj` < 0.0001, ]
+post_test_df <- as.data.frame(post_test$Spot1_Cluster)
+post_test_df_filt <- post_test_df[post_test_df$`p adj` < 0.01, ]
 
 
