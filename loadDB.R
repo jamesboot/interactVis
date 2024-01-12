@@ -12,14 +12,14 @@ loadDB <- function(gene.input,
   # This allows us to look up gene names and find their uniprot ID
   gene_lookup <-
     read.csv(
-      '/Users/jamesboot/Documents/9.Genome Centre Files/interactVis/cellphonedb-data-4.0.0/data/gene_input_all.csv'
+      gene.input
     )
   
   # We need to load the complex input file
   # This contains all info of the complexes - what proteins are involved
   complex_lookup <-
     read.csv(
-      '/Users/jamesboot/Documents/9.Genome Centre Files/interactVis/cellphonedb-data-4.0.0/data/complex_input.csv'
+      complex.input
     )
   # Make the complex name the row names
   row.names(complex_lookup) <- complex_lookup$complex_name
@@ -28,7 +28,7 @@ loadDB <- function(gene.input,
   # This contains the complex names and the proteins that interact with it
   interact_lookup <-
     read.csv(
-      '/Users/jamesboot/Documents/9.Genome Centre Files/interactVis/cellphonedb-data-4.0.0/data/interaction_input.csv'
+      interaction.input
     )
   
   # Iterate through all complexes and update database list along to way

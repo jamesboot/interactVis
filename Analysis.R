@@ -5,6 +5,9 @@ library(Seurat)
 library(ggplot2)
 library(dplyr)
 library(multcomp)
+library(purrr)
+library(tibble)
+library(edgeR)
 
 # Change working directory
 setwd('/Users/jamesboot/Documents/GitHub/')
@@ -181,72 +184,90 @@ recepLigSum <- diffIntDF  %>%
   summarise(n = n()) %>%
   arrange(n)
 
-# Select the receptor ligand pair with most interactions across the tissue
-coi <- tail(recepLigSum$spot1_complex, n = 10)
+# Create a dataframe of complexes as rows, clusters as columns
 
-# Go through complexes of interest in for loop
-for (x in coi) {
-  
-  # Subset down to complex of interest and
-  # Remove rows which have 10 or fewer occurrences for each cluster
-  diffIntDF_filt <- diffIntDF %>%
-    filter(spot1_complex == x) %>%
-    group_by(Spot1_Cluster) %>%
-    filter(n() >= 10)
-  
-  # Plot box plot of interaction scores for complex of interest across spot 1 clusters
-  p5c <-
-    ggplot(diffIntDF_filt,
-           aes(x = Spot1_Cluster, y = interaction_score)) +
-    geom_boxplot(outlier.shape = NA) +
-    theme(axis.text.x = element_text(
-      angle = 90,
-      vjust = 0.5,
-      hjust = 1
-    )) +
-    ggtitle(label = paste0(x, ' average interaction score per cluster'))
-  
-  # Save
-  ggsave(
-    filename = paste0(x, '_score_boxplot.tiff'),
-    plot = p5c,
-    width = 20,
-    height = 10,
-    units = 'in',
-    dpi = 300
-  )
-  
-  # # Is data normally distributed?
-  # qqnorm(diffIntDF_filt$interaction_score)
-  # qqline(diffIntDF_filt$interaction_score)
-  #
-  # # Descriptive stats
-  # stats <- aggregate(interaction_score ~ Spot1_Cluster,
-  #                    data = diffIntDF_filt,
-  #                    function(x)
-  #                      round(c(mean = mean(x), sd = sd(x)), 2))
-  
-  # Lets compare the interaction scores in two different clusters
-  # Use Welchs ANOVA as not normally distributed
-  res_aov1 <- oneway.test(interaction_score ~ Spot1_Cluster,
-                          data = diffIntDF_filt,
-                          var.equal = FALSE)
-  #res_aov1
-  res_aov2 <- aov(interaction_score ~ Spot1_Cluster,
-                  data = diffIntDF_filt)
-  #summary(res_aov2)
-  
-  # If there is a difference perform Tukeys post hoc test
-  # Tukey HSD test:
-  post_test <- TukeyHSD(res_aov2, conf.level = 0.99)
-  plot(TukeyHSD(res_aov2, conf.level = .99), las = 2)
-  
-  # Extract significant results
-  post_test_df <- as.data.frame(post_test$Spot1_Cluster)
-  post_test_df_filt <- post_test_df[post_test_df$`p adj` < 0.01,]
-  
-  # Save stats results
-  write.csv(post_test_df, file = paste0(x, '_tukeyHSD.csv'))
-  
+# Average interaction scores for each complex in each cluster 
+complex_cluster_av <- diffIntDF  %>%
+  group_by(spot1_complex, Spot1_Cluster) %>%
+  summarise(Mean = mean(interaction_score))
+
+# Make a matrix with spot1 as columns and complex as rows, interaction scores as values:
+
+# Make a dummy list
+dumList <- list()
+
+# Create new receptor ligand column in diffIntDF
+diffIntDF <- diffIntDF %>%
+  mutate(Receptor_Ligand = paste0(spot1_complex, '-', spot2_ligand))
+
+# For loop to go through each cell
+# Use dplyr to extract and summarise interaction scores for all receptor-ligands
+# Put the new dataframe for the spot into dummy list
+c <- 1
+for (bc in unique(diffIntDF$spot1)) {
+  message(paste0('Starting cell ', c, ' of 1311...'))
+  int <- diffIntDF %>%
+    filter(spot1 == bc) %>%
+    group_by(Receptor_Ligand) %>%
+    summarise(Mean_Int = mean(interaction_score))
+  colnames(int)[2] <- bc
+  dumList[[bc]] <- int
+  c <- c + 1
 }
+
+# Merge list elements
+interactionMat <-
+  dumList %>% reduce(full_join, by = "Receptor_Ligand") %>%
+  column_to_rownames('Receptor_Ligand')
+
+# Get rid of NAs
+interactionMat[is.na(interactionMat)] <- 0
+
+# Log transform?
+interactionMatLog <- log(interactionMat + 1)
+
+# Create differential interaction meta data from Partek meta data
+row.names(partekMetaFilt) <- partekMetaFilt$Cell.name
+partekMetaFilt$Cell.name <- NULL
+diffIntMeta <- partekMetaFilt[colnames(interactionMat), c('Brain', 'Clusters..5comp.0.75res')]
+colnames(diffIntMeta) <- c('Brain', 'Cluster')
+diffIntMeta$Cluster
+
+# Convert cluster to character for down stream
+diffIntMeta$Cluster[diffIntMeta$Cluster == 1] <- 'One'
+diffIntMeta$Cluster[diffIntMeta$Cluster == 2] <- 'Two'
+diffIntMeta$Cluster[diffIntMeta$Cluster == 3] <- 'Three'
+diffIntMeta$Cluster[diffIntMeta$Cluster == 4] <- 'Four'
+diffIntMeta$Cluster[diffIntMeta$Cluster == 5] <- 'Five'
+diffIntMeta$Cluster[diffIntMeta$Cluster == 6] <- 'Six'
+diffIntMeta$Cluster[diffIntMeta$Cluster == 7] <- 'Seven'
+diffIntMeta$Cluster[diffIntMeta$Cluster == 8] <- 'Eight'
+diffIntMeta$Cluster[diffIntMeta$Cluster == 9] <- 'Nine'
+diffIntMeta$Cluster[diffIntMeta$Cluster == 10] <- 'Ten'
+diffIntMeta$Cluster[diffIntMeta$Cluster == 11] <- 'Eleven'
+diffIntMeta$Cluster[diffIntMeta$Cluster == 12] <- 'Twelve'
+diffIntMeta$Cluster[diffIntMeta$Cluster == 13] <- 'Thirteen'
+diffIntMeta$Cluster[diffIntMeta$Cluster == 14] <- 'Fourteen'
+diffIntMeta$Cluster[diffIntMeta$Cluster == 15] <- 'Fifteen'
+diffIntMeta$Cluster[diffIntMeta$Cluster == 16] <- 'Sixteen'
+
+# Try creating DGEList from edgeR
+y <- DGEList(counts = interactionMat,
+             group = diffIntMeta$Cluster)
+
+# Estimate dispersion
+y <- estimateDisp(y)
+
+# Design matrix
+design <- model.matrix(~0 + group, data = y$samples)
+colnames(design) <- levels(y$samples$group)
+
+# Fit model
+fit <- glmQLFit(y, design)
+
+# Test
+myContrast <- makeContrasts(Two-Ten, levels = design)
+c2_v_c10 <- glmQLFTest(fit, contrast = myContrast)
+topTags(c2_v_c10)
+
 
