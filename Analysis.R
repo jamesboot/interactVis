@@ -136,6 +136,12 @@ interactionSum <- diffIntDF %>%
   summarise(n = n())
 View(interactionSum)
 
+# Which receptor ligands have the most interactions across the tissue?
+recepLigSum <- diffIntDF  %>%
+  group_by(spot1_complex) %>%
+  summarise(n = n()) %>%
+  arrange(n)
+
 # Plot - How many total interactions does each cluster have, regardless of receptor-ligand?
 p5a <-
   ggplot(interactionSum,
@@ -177,12 +183,6 @@ ggsave(
   units = 'in',
   dpi = 300
 )
-
-# Which receptor ligands have the most interactions across the tissue?
-recepLigSum <- diffIntDF  %>%
-  group_by(spot1_complex) %>%
-  summarise(n = n()) %>%
-  arrange(n)
 
 # Create a dataframe of complexes as rows, clusters as columns
 
@@ -265,9 +265,83 @@ colnames(design) <- levels(y$samples$group)
 # Fit model
 fit <- glmQLFit(y, design)
 
-# Test
-myContrast <- makeContrasts(Two-Ten, levels = design)
-c2_v_c10 <- glmQLFTest(fit, contrast = myContrast)
-topTags(c2_v_c10)
+# Make comparisons 
+myContrast <- makeContrasts(Two-Ten,
+                            Two-Eight,
+                            Eight-Ten,
+                            Four-Twelve,
+                            Seven-Twelve,
+                            Four-Seven,
+                            levels = design)
 
+# For loop to go through all comparisons and perform tests
+for (x in colnames(myContrast)) {
+  
+  message(paste0('Starting comparison: ', x))
+  results <- glmQLFTest(fit, contrast = myContrast[, x])
+  filtRes <- topTags(results, n = 1000, sort.by = 'PValue', p.value = 1)
+  write.csv(filtRes, file = paste0(x, '_R-L_Interactions.csv'))
+    
+} 
+
+# Try simple Stats Test ----
+
+# Transpose the interaction mat
+interactionDF <- as.data.frame(t(interactionMat))
+
+# Add cell as column in meta and count mat
+interactionDF <- interactionDF %>% 
+  rownames_to_column(var = 'cell')
+diffIntMeta2 <- diffIntMeta %>% 
+  rownames_to_column(var = 'cell')
+
+# Now join meta and column
+tTestDF <- interactionDF %>% 
+  left_join(diffIntMeta2, by = 'cell')
+
+# Create list of vectors of comparisons to perform
+comparisons <- list('Two_Ten' = c('Two', 'Ten'),
+                    'Two_Eight' = c('Two', 'Eight'),
+                    'Eight_Ten' = c('Eight', 'Ten'),
+                    'Four_Twelve' = c('Four', 'Twelve'),
+                    'Seven_Twelve' = c('Seven', 'Twelve'),
+                    'Four_Seven' = c('Four', 'Seven'))
+
+# For loop to perform stats for each comparison
+for (comp in names(comparisons)) {
+  
+  message('Starting comparison: ', comp)
+  
+  # Subset down to clusters we want to compare
+  tTestDFFilt <- tTestDF %>%
+    filter(Cluster %in% comparisons[[comp]])
+  
+  # Make dataframe for results
+  wilcoxRes <- data.frame()
+  
+  # For loop to perform test on all columns
+  for (x in c(2:(ncol(tTestDFFilt) - 2))) {
+    
+    # As data is not normally distributed - use wilcoxon
+    res <-
+      wilcox.test(tTestDFFilt[, x] ~ Cluster,
+                  data = tTestDFFilt,
+                  paired = F)
+    
+    # Adjust the p-value
+    FDR <-
+      p.adjust(res$p.value, method = 'fdr', n = length(c(2:(
+        ncol(tTestDFFilt) - 2
+      ))))
+    
+    # Put result into dataframe
+    wilcoxRes[colnames(tTestDFFilt)[x], 'Receptor-Ligand'] <-
+      colnames(tTestDFFilt)[x]
+    wilcoxRes[colnames(tTestDFFilt)[x], 'P-Value'] <- res$p.value
+    wilcoxRes[colnames(tTestDFFilt)[x], 'FDR'] <- FDR
+    
+    write.csv(wilcoxRes, file = paste0(comp, '_wilcox_res.csv'))
+    
+  }
+}
 
