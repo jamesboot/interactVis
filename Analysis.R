@@ -16,6 +16,9 @@ setwd('/Users/jamesboot/Documents/GitHub/')
 source('interactVis/findNeighbours.R')
 source('interactVis/loadDB.R')
 source('interactVis/findInteractions.R')
+source('interactVis/annotateInteractions.R')
+source('interactVis/interactionMatrix.R')
+source('interactVis/interactionMeta.R')
 
 # Load database
 database <- loadDB(gene.input = 'interactVis/cellphonedb-data-4.0.0/data/gene_input_all.csv',
@@ -111,25 +114,12 @@ p4 <- SpatialPlot(dat, group.by = 'Cluster', label.size = 10) +
 p4
 
 # Annotate the Interactions results with the cluster for spot 1 and spot 2
-# Create new df for this
-diffIntDF <- interactions$Interactions
-diffIntDF$Spot1_Cluster <- NA
-diffIntDF$Spot2_Cluster <- NA
-for (x in 1:nrow(diffIntDF)) {
-  diffIntDF$Spot1_Cluster[x] <-
-    partekMetaFilt$Clusters..5comp.0.75res[partekMetaFilt$Cell.name == diffIntDF$spot1[x]]
-  diffIntDF$Spot2_Cluster[x] <-
-    partekMetaFilt$Clusters..5comp.0.75res[partekMetaFilt$Cell.name == diffIntDF$spot2[x]]
-}
-View(diffIntDF)
-
-# Ensure Spot1_Cluster and Spot2 Cluster are factors
-diffIntDF$Spot1_Cluster <- as.factor(diffIntDF$Spot1_Cluster)
-diffIntDF$Spot2_Cluster <- as.factor(diffIntDF$Spot2_Cluster)
+diffIntDF <- annotateInteractions(SeuratObj = dat,
+                                  Interactions = interactions,
+                                  Attribute = 'Cluster')
 
 # Interactions will be annotated with spot 1 cluster
 # Because spot1 is where the receptor expression is taken from (i.e. the actuator of signalling) 
-
 # How many of each interactions per cluster are there?
 interactionSum <- diffIntDF %>%
   group_by(Spot1_Cluster) %>%
@@ -184,147 +174,47 @@ ggsave(
   dpi = 300
 )
 
-# Create a dataframe of complexes as rows, clusters as columns
-
-# Average interaction scores for each complex in each cluster 
-complex_cluster_av <- diffIntDF  %>%
-  group_by(spot1_complex, Spot1_Cluster) %>%
-  summarise(Mean = mean(interaction_score))
-
-# Make a matrix with spot1 as columns and complex as rows, interaction scores as values:
-
-# Make a dummy list
-dumList <- list()
-
-# Create new receptor ligand column in diffIntDF
-diffIntDF <- diffIntDF %>%
-  mutate(Receptor_Ligand = paste0(spot1_complex, '-', spot2_ligand))
-
-# For loop to go through each cell
-# Use dplyr to extract and summarise interaction scores for all receptor-ligands
-# Put the new dataframe for the spot into dummy list
-c <- 1
-for (bc in unique(diffIntDF$spot1)) {
-  message(paste0('Starting cell ', c, ' of 1311...'))
-  int <- diffIntDF %>%
-    filter(spot1 == bc) %>%
-    group_by(Receptor_Ligand) %>%
-    summarise(Mean_Int = mean(interaction_score))
-  colnames(int)[2] <- bc
-  dumList[[bc]] <- int
-  c <- c + 1
-}
-
-# Merge list elements
-interactionMat <-
-  dumList %>% reduce(full_join, by = "Receptor_Ligand") %>%
-  column_to_rownames('Receptor_Ligand')
-
-# Get rid of NAs
-interactionMat[is.na(interactionMat)] <- 0
-
-# Log transform?
-interactionMatLog <- log(interactionMat + 1)
+# Create Interaction Matrix
+IntMat <- interactionMatrix(AnnoInt = diffIntDF)
 
 # Create differential interaction meta data from Partek meta data
-row.names(partekMetaFilt) <- partekMetaFilt$Cell.name
-partekMetaFilt$Cell.name <- NULL
-diffIntMeta <- partekMetaFilt[colnames(interactionMat), c('Brain', 'Clusters..5comp.0.75res')]
-colnames(diffIntMeta) <- c('Brain', 'Cluster')
-diffIntMeta$Cluster
+diffIntMeta <- createMetaData(SeuratObj = dat,
+                              InteractionMat = IntMat,
+                              Attributes = c('orig.ident', 'Cluster'))
 
-# Convert cluster to character for down stream
-diffIntMeta$Cluster[diffIntMeta$Cluster == 1] <- 'One'
-diffIntMeta$Cluster[diffIntMeta$Cluster == 2] <- 'Two'
-diffIntMeta$Cluster[diffIntMeta$Cluster == 3] <- 'Three'
-diffIntMeta$Cluster[diffIntMeta$Cluster == 4] <- 'Four'
-diffIntMeta$Cluster[diffIntMeta$Cluster == 5] <- 'Five'
-diffIntMeta$Cluster[diffIntMeta$Cluster == 6] <- 'Six'
-diffIntMeta$Cluster[diffIntMeta$Cluster == 7] <- 'Seven'
-diffIntMeta$Cluster[diffIntMeta$Cluster == 8] <- 'Eight'
-diffIntMeta$Cluster[diffIntMeta$Cluster == 9] <- 'Nine'
-diffIntMeta$Cluster[diffIntMeta$Cluster == 10] <- 'Ten'
-diffIntMeta$Cluster[diffIntMeta$Cluster == 11] <- 'Eleven'
-diffIntMeta$Cluster[diffIntMeta$Cluster == 12] <- 'Twelve'
-diffIntMeta$Cluster[diffIntMeta$Cluster == 13] <- 'Thirteen'
-diffIntMeta$Cluster[diffIntMeta$Cluster == 14] <- 'Fourteen'
-diffIntMeta$Cluster[diffIntMeta$Cluster == 15] <- 'Fifteen'
-diffIntMeta$Cluster[diffIntMeta$Cluster == 16] <- 'Sixteen'
-
-# Try creating DGEList from edgeR
-y <- DGEList(counts = interactionMat,
-             group = diffIntMeta$Cluster)
-
-# Estimate dispersion
-y <- estimateDisp(y)
-
-# Design matrix
-design <- model.matrix(~0 + group, data = y$samples)
-colnames(design) <- levels(y$samples$group)
-
-# Fit model
-fit <- glmQLFit(y, design)
-
-# Make comparisons 
-myContrast <- makeContrasts(Two-Ten,
-                            Two-Eight,
-                            Eight-Ten,
-                            Four-Twelve,
-                            Seven-Twelve,
-                            Four-Seven,
-                            levels = design)
-
-# For loop to go through all comparisons and perform tests
-for (x in colnames(myContrast)) {
+# Function to perform multiple t-tests to compare interaction scores between clusters
+differentialInteraction <- function(InteractionMat,
+                                    Meta,
+                                    Attribute,
+                                    Comparison) {
   
-  message(paste0('Starting comparison: ', x))
-  results <- glmQLFTest(fit, contrast = myContrast[, x])
-  filtRes <- topTags(results, n = 1000, sort.by = 'PValue', p.value = 1)
-  write.csv(filtRes, file = paste0(x, '_R-L_Interactions.csv'))
-    
-} 
-
-# Try simple Stats Test ----
-
-# Transpose the interaction mat
-interactionDF <- as.data.frame(t(interactionMat))
-
-# Add cell as column in meta and count mat
-interactionDF <- interactionDF %>% 
-  rownames_to_column(var = 'cell')
-diffIntMeta2 <- diffIntMeta %>% 
-  rownames_to_column(var = 'cell')
-
-# Now join meta and column
-tTestDF <- interactionDF %>% 
-  left_join(diffIntMeta2, by = 'cell')
-
-# Create list of vectors of comparisons to perform
-comparisons <- list('Two_Ten' = c('Two', 'Ten'),
-                    'Two_Eight' = c('Two', 'Eight'),
-                    'Eight_Ten' = c('Eight', 'Ten'),
-                    'Four_Twelve' = c('Four', 'Twelve'),
-                    'Seven_Twelve' = c('Seven', 'Twelve'),
-                    'Four_Seven' = c('Four', 'Seven'))
-
-# For loop to perform stats for each comparison
-for (comp in names(comparisons)) {
+  # Transpose the interaction mat
+  interactionDF <- as.data.frame(t(InteractionMat))
   
-  message('Starting comparison: ', comp)
+  # Add cell as column in meta and count mat
+  interactionDF <- interactionDF %>%
+    rownames_to_column(var = 'cell')
+  diffIntMeta2 <- Meta %>%
+    rownames_to_column(var = 'cell')
+  
+  # Now join meta and column
+  tTestDF <- interactionDF %>%
+    left_join(diffIntMeta2, by = 'cell')
   
   # Subset down to clusters we want to compare
+  # Focus on 2 and 10 for now
   tTestDFFilt <- tTestDF %>%
-    filter(Cluster %in% comparisons[[comp]])
+    filter(Attribute %in% Comparison)
   
   # Make dataframe for results
   wilcoxRes <- data.frame()
   
   # For loop to perform test on all columns
-  for (x in c(2:(ncol(tTestDFFilt) - 2))) {
+  for (x in c(2:(ncol(tTestDFFilt) - ncol(Meta)))) {
     
     # As data is not normally distributed - use wilcoxon
     res <-
-      wilcox.test(tTestDFFilt[, x] ~ Cluster,
+      wilcox.test(tTestDFFilt[, x] ~ Attribute,
                   data = tTestDFFilt,
                   paired = F)
     
@@ -340,8 +230,8 @@ for (comp in names(comparisons)) {
     wilcoxRes[colnames(tTestDFFilt)[x], 'P-Value'] <- res$p.value
     wilcoxRes[colnames(tTestDFFilt)[x], 'FDR'] <- FDR
     
-    write.csv(wilcoxRes, file = paste0(comp, '_wilcox_res.csv'))
-    
   }
 }
+
+write.csv(wilcoxRes, file = paste0(comp, '_wilcox_res.csv'))
 
