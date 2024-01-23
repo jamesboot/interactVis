@@ -7,7 +7,8 @@ library(dplyr)
 library(multcomp)
 library(purrr)
 library(tibble)
-library(edgeR)
+library(ComplexHeatmap)
+library(RColorBrewer)
 
 # Change working directory
 setwd('/Users/jamesboot/Documents/GitHub/')
@@ -19,6 +20,7 @@ source('interactVis/findInteractions.R')
 source('interactVis/annotateInteractions.R')
 source('interactVis/interactionMatrix.R')
 source('interactVis/interactionMeta.R')
+source('interactVis/differentialInteraction.R')
 
 # Load database
 database <- loadDB(gene.input = 'interactVis/cellphonedb-data-4.0.0/data/gene_input_all.csv',
@@ -68,38 +70,36 @@ interactions <- calculateInteractions(neighboursList = neighbours,
                                       filter = FALSE)
 
 # DATA VISUALISATION ----
-
-# Extract all spots enriched for top occurring complex interaction
-coi <- interactions$Complex_Summary$spot1_complex[2]
-spots <- unique(c(interactions$Interactions$spot1[interactions$Interactions$spot1_complex == coi],
-                  interactions$Interactions$spot2[interactions$Interactions$spot1_complex == coi]))
-
-# Create dataframe to add this to meta data
-select <- names(neighbours)[names(neighbours) %in% dat@assays$Spatial@counts@Dimnames[[2]]]
-new_meta <- data.frame(barcodes = select,
-                       interaction1 = NA)
-
-new_meta$interaction1[new_meta$barcodes %in% spots] <- coi
-new_meta$interaction1[!new_meta$barcodes %in% spots] <- 'None'
-
-row.names(new_meta) <- new_meta$barcodes
-new_meta$barcodes <- NULL
-
-# Add new meta data to object
-dat <- AddMetaData(dat, new_meta)
-
-# Visualise the new meta data along with genes and receptors of the complex
-p1 <- SpatialPlot(dat, group.by = 'interaction1')
-p1
-
-database[[coi]]
-p2 <- SpatialFeaturePlot(dat, features = database[[coi]][["Complex_Genes"]])
-p2
-
-p3 <- SpatialFeaturePlot(dat, features = database[[coi]][["Partner_Genes"]])
-p3
-
-# DIFFERENTIAL CLUSTER ANALYSIS ----
+# 
+# # Extract all spots enriched for top occurring complex interaction
+# coi <- interactions$Complex_Summary$spot1_complex[2]
+# spots <- unique(c(interactions$Interactions$spot1[interactions$Interactions$spot1_complex == coi],
+#                   interactions$Interactions$spot2[interactions$Interactions$spot1_complex == coi]))
+# 
+# # Create dataframe to add this to meta data
+# select <- names(neighbours)[names(neighbours) %in% dat@assays$Spatial@counts@Dimnames[[2]]]
+# new_meta <- data.frame(barcodes = select,
+#                        interaction1 = NA)
+# 
+# new_meta$interaction1[new_meta$barcodes %in% spots] <- coi
+# new_meta$interaction1[!new_meta$barcodes %in% spots] <- 'None'
+# 
+# row.names(new_meta) <- new_meta$barcodes
+# new_meta$barcodes <- NULL
+# 
+# # Add new meta data to object
+# dat <- AddMetaData(dat, new_meta)
+# 
+# # Visualise the new meta data along with genes and receptors of the complex
+# p1 <- SpatialPlot(dat, group.by = 'interaction1')
+# p1
+# 
+# database[[coi]]
+# p2 <- SpatialFeaturePlot(dat, features = database[[coi]][["Complex_Genes"]])
+# p2
+# 
+# p3 <- SpatialFeaturePlot(dat, features = database[[coi]][["Partner_Genes"]])
+# p3
 
 # Add cluster numbers from Partek
 partekMeta <- read.delim('/Users/jamesboot/Documents/9.Genome Centre Files/GC-TM-10271/exported.txt')
@@ -109,9 +109,9 @@ clustersMeta <- data.frame(row.names = partekMetaFilt$Cell.name,
 dat <- AddMetaData(dat, clustersMeta)
 
 # Visualise the clusters for this sample
-p4 <- SpatialPlot(dat, group.by = 'Cluster', label.size = 10) +  
-  guides(color = guide_legend(override.aes = list(size=4), ncol=1) )
-p4
+# p4 <- SpatialPlot(dat, group.by = 'Cluster', label.size = 10) +  
+#   guides(color = guide_legend(override.aes = list(size=4), ncol=1) )
+# p4
 
 # Annotate the Interactions results with the cluster for spot 1 and spot 2
 diffIntDF <- annotateInteractions(SeuratObj = dat,
@@ -120,59 +120,72 @@ diffIntDF <- annotateInteractions(SeuratObj = dat,
 
 # Interactions will be annotated with spot 1 cluster
 # Because spot1 is where the receptor expression is taken from (i.e. the actuator of signalling) 
+
 # How many of each interactions per cluster are there?
+# And between clusters 
+# Plot as heatmap
+# Find number of interactions between groups
 interactionSum <- diffIntDF %>%
-  group_by(Spot1_Cluster) %>%
+  group_by(Spot1_Anno, Spot2_Anno) %>%
   summarise(n = n())
 View(interactionSum)
 
-# Which receptor ligands have the most interactions across the tissue?
-recepLigSum <- diffIntDF  %>%
-  group_by(spot1_complex) %>%
-  summarise(n = n()) %>%
-  arrange(n)
+# Convert to matrix
+# Create empty matrix to population
+interactionSumMat <- matrix(data = NA,
+                            nrow = length(unique(interactionSum$Spot1_Anno)),
+                            ncol = length(unique(interactionSum$Spot2_Anno)),
+                            dimnames = list(unique(interactionSum$Spot1_Anno),
+                                            unique(interactionSum$Spot1_Anno)))
 
-# Plot - How many total interactions does each cluster have, regardless of receptor-ligand?
-p5a <-
-  ggplot(interactionSum,
-         aes(x = Spot1_Cluster, y = n)) +
-  geom_bar(stat = 'identity') +
-  theme(axis.text.x = element_text(
-    angle = 90,
-    vjust = 0.5,
-    hjust = 1
-  )) +
-  ggtitle('Total number of receptor-ligand interactions per cluster')
-p5a
-ggsave(
-  'n_interactions_cluster.tiff',
-  plot = p5a,
-  width = 20,
-  height = 10,
-  units = 'in',
-  dpi = 300
-)
+# Populate matrix in for loop
+for (row in unique(interactionSum$Spot1_Anno)) {
+  for (col in unique(interactionSum$Spot1_Anno)) {
+    
+    # Find the n number
+    n <- interactionSum %>%
+      filter(Spot1_Anno == row & Spot2_Anno == col) %>%
+      pull(n)
+    
+    # If length of n == 1 add to matrix 
+    if (length(n) == 1) {
+     
+      # Populate with value in n
+      interactionSumMat[row, col] <- n
+       
+    } else if (length(n) == 0) {
+      
+      # Populate with 0
+      interactionSumMat[row, col] <- 0
+      
+    } else {
+      
+      message('Error, length of n is neither 1 or 0.')
+      
+    }
+  }
+}
 
-# Plot - What is the average interaction score per cluster, regardless of receptor-ligand?
-p5b <-
-  ggplot(diffIntDF,
-         aes(x = Spot1_Cluster, y = interaction_score)) +
-  geom_boxplot(outlier.shape = NA) +
-  theme(axis.text.x = element_text(
-    angle = 90,
-    vjust = 0.5,
-    hjust = 1
-  )) +
-  ggtitle('Average interaction score per cluster')
-p5b
-ggsave(
-  'av_interaction_score.tiff',
-  plot = p5b,
-  width = 20,
-  height = 10,
-  units = 'in',
-  dpi = 300
+# Set colours for heatmap
+colfun <- colorRampPalette(brewer.pal(8, "Blues"))(25)
+
+# Set histogram values for heatmap
+column_bp = HeatmapAnnotation(Total = anno_barplot(colSums(interactionSumMat),
+                                                   gp = gpar(fill = '#000000')))
+row_bp = rowAnnotation(Total = anno_barplot(rowSums(interactionSumMat),
+                                            gp = gpar(fill = '#000000')))
+
+# Plot heatmap
+htmap <- Heatmap(
+  interactionSumMat,
+  col = colfun,
+  top_annotation = column_bp,
+  left_annotation = row_bp,
+  name = 'n_intrtns'
 )
+ggsave(plot = htmap, filename = 'test.tiff')
+
+# DIFFERENTIAL CLUSTER ANALYSIS ----
 
 # Create Interaction Matrix
 IntMat <- interactionMatrix(AnnoInt = diffIntDF)
@@ -182,56 +195,11 @@ diffIntMeta <- createMetaData(SeuratObj = dat,
                               InteractionMat = IntMat,
                               Attributes = c('orig.ident', 'Cluster'))
 
-# Function to perform multiple t-tests to compare interaction scores between clusters
-differentialInteraction <- function(InteractionMat,
-                                    Meta,
-                                    Attribute,
-                                    Comparison) {
-  
-  # Transpose the interaction mat
-  interactionDF <- as.data.frame(t(InteractionMat))
-  
-  # Add cell as column in meta and count mat
-  interactionDF <- interactionDF %>%
-    rownames_to_column(var = 'cell')
-  diffIntMeta2 <- Meta %>%
-    rownames_to_column(var = 'cell')
-  
-  # Now join meta and column
-  tTestDF <- interactionDF %>%
-    left_join(diffIntMeta2, by = 'cell')
-  
-  # Subset down to clusters we want to compare
-  # Focus on 2 and 10 for now
-  tTestDFFilt <- tTestDF %>%
-    filter(Attribute %in% Comparison)
-  
-  # Make dataframe for results
-  wilcoxRes <- data.frame()
-  
-  # For loop to perform test on all columns
-  for (x in c(2:(ncol(tTestDFFilt) - ncol(Meta)))) {
-    
-    # As data is not normally distributed - use wilcoxon
-    res <-
-      wilcox.test(tTestDFFilt[, x] ~ Attribute,
-                  data = tTestDFFilt,
-                  paired = F)
-    
-    # Adjust the p-value
-    FDR <-
-      p.adjust(res$p.value, method = 'fdr', n = length(c(2:(
-        ncol(tTestDFFilt) - 2
-      ))))
-    
-    # Put result into dataframe
-    wilcoxRes[colnames(tTestDFFilt)[x], 'Receptor-Ligand'] <-
-      colnames(tTestDFFilt)[x]
-    wilcoxRes[colnames(tTestDFFilt)[x], 'P-Value'] <- res$p.value
-    wilcoxRes[colnames(tTestDFFilt)[x], 'FDR'] <- FDR
-    
-  }
-}
+# Perform differential interaction analysis
+diffInt2v10 <- differentialInteraction(InteractionMat = IntMat,
+                                       Meta = diffIntMeta,
+                                       Attribute = 'Cluster',
+                                       Comparison = c(2, 10))
 
 write.csv(wilcoxRes, file = paste0(comp, '_wilcox_res.csv'))
 
