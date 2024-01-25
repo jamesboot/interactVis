@@ -158,13 +158,13 @@ for (ITER in 1:c(length(samples))) {
     ncol = length(unique(interactionSum$Spot2_Anno)),
     dimnames = list(
       unique(interactionSum$Spot1_Anno),
-      unique(interactionSum$Spot1_Anno)
+      unique(interactionSum$Spot2_Anno)
     )
   )
   
   # Populate matrix in for loop
   for (row in unique(interactionSum$Spot1_Anno)) {
-    for (col in unique(interactionSum$Spot1_Anno)) {
+    for (col in unique(interactionSum$Spot2_Anno)) {
       # Find the n number
       n <- interactionSum %>%
         filter(Spot1_Anno == row & Spot2_Anno == col) %>%
@@ -227,8 +227,8 @@ for (ITER in 1:c(length(samples))) {
   )
   
   # Perform differential interaction analysis
-  # Check that 2 and 10 are both in the meta data - if not move on
-  if (sum(diffIntMeta$Cluster == 2) > 0 & sum(diffIntMeta$Cluster == 10) > 0) {
+  # Check there are at least 3 occurences of each 2 and 10 in the meta data - if not move on
+  if (sum(diffIntMeta$Cluster == 2) > 3 & sum(diffIntMeta$Cluster == 10) > 3) {
   
   diffInt2v10 <- differentialInteraction(
     InteractionMat = IntMat,
