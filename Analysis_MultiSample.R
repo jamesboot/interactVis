@@ -227,6 +227,9 @@ for (ITER in 1:c(length(samples))) {
   )
   
   # Perform differential interaction analysis
+  # Check that 2 and 10 are both in the meta data - if not move on
+  if (sum(diffIntMeta$Cluster == 2) > 0 & sum(diffIntMeta$Cluster == 10) < 0) {
+  
   diffInt2v10 <- differentialInteraction(
     InteractionMat = IntMat,
     Meta = diffIntMeta,
@@ -236,6 +239,12 @@ for (ITER in 1:c(length(samples))) {
   
   write.csv(diffInt2v10,
             file = paste0(base.dir, '/', samples[ITER], '/', samples[ITER], '_wilcox.csv'))
+  
+  } else {
+    
+    next
+    
+  }
   
 }
 
