@@ -1,10 +1,5 @@
 # Function to perform multiple t-tests to compare interaction scores between clusters
 
-InteractionMat = IntMat
-  Meta = diffIntMeta
-  Attribute = 'Cluster'
-  Comparison = c(2, 10)
-
 # Create function
 differentialInteraction <- function(InteractionMat,
                                     Meta,
@@ -53,4 +48,5 @@ differentialInteraction <- function(InteractionMat,
     wilcoxRes[colnames(tTestDFFilt)[x], 'FDR'] <- FDR
     
   }
+  return(wilcoxRes)
 }
