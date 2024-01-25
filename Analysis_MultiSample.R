@@ -228,7 +228,7 @@ for (ITER in 1:c(length(samples))) {
   
   # Perform differential interaction analysis
   # Check that 2 and 10 are both in the meta data - if not move on
-  if (sum(diffIntMeta$Cluster == 2) > 0 & sum(diffIntMeta$Cluster == 10) < 0) {
+  if (sum(diffIntMeta$Cluster == 2) > 0 & sum(diffIntMeta$Cluster == 10) > 0) {
   
   diffInt2v10 <- differentialInteraction(
     InteractionMat = IntMat,
