@@ -137,12 +137,11 @@ for (ITER in 1:c(length(samples))) {
                                     Interactions = interactions,
                                     Attribute = 'Cluster')
   
-  # Interactions will be annotated with spot 1 cluster
-  # Because spot1 is where the receptor expression is taken from (i.e. the actuator of signalling)
+  # Spot 1 is the receiver (where the receptor expression is taken from)
+  # Spot 2 is the sender (where the ligand expression is taken from)
   
   # How many of each interactions per cluster are there?
   # And between clusters
-  # Plot as heatmap
   # Find number of interactions between groups
   interactionSum <- diffIntDF %>%
     group_by(Spot1_Anno, Spot2_Anno) %>%
