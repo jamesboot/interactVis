@@ -204,13 +204,13 @@ for (ITER in 1:c(length(samples))) {
     res = 300,
     units = 'in'
   )
-  Heatmap(
+  draw(Heatmap(
     interactionSumMat,
     col = colfun,
     top_annotation = column_bp,
     left_annotation = row_bp,
     name = 'n_intrtns'
-  )
+  ))
   dev.off()
   
   # DIFFERENTIAL CLUSTER ANALYSIS ----
