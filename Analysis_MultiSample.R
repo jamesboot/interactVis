@@ -226,7 +226,7 @@ for (ITER in 1:c(length(samples))) {
   )
   
   # Perform differential interaction analysis
-  # Check there are at least 3 occurences of each 2 and 10 in the meta data - if not move on
+  # Check there are at least 3 occurrences of each 2 and 10 in the meta data - if not move on
   if (sum(diffIntMeta$Cluster == 2) > 3 & sum(diffIntMeta$Cluster == 10) > 3) {
   
   diffInt2v10 <- differentialInteraction(
