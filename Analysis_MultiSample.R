@@ -1,5 +1,7 @@
 # Script for implementing, testing and developing interactVis functions
 
+#### PART 1: Load packages, data and preprocess ----
+
 # Load libraries
 library(Seurat)
 library(ggplot2)
@@ -9,6 +11,7 @@ library(purrr)
 library(tibble)
 library(ComplexHeatmap)
 library(RColorBrewer)
+library(circlize)
 
 # Change working directory
 setwd('/Users/jamesboot/Documents/GitHub/')
@@ -53,6 +56,8 @@ samples <- gsub(
     dirs
   )
 )
+
+#### PART 2: Loop through all samples and perform interaction analysis ----
                 
 # For loop to go through all samples and perform all analysis
 for (ITER in 1:c(length(samples))) {
@@ -133,12 +138,11 @@ for (ITER in 1:c(length(samples))) {
   )
   
   # Annotate the Interactions results with the cluster for spot 1 and spot 2
+  # Spot 1 is the receiver (where the receptor expression is taken from)
+  # Spot 2 is the sender (where the ligand expression is taken from)
   diffIntDF <- annotateInteractions(SeuratObj = dat,
                                     Interactions = interactions,
                                     Attribute = 'Cluster')
-  
-  # Spot 1 is the receiver (where the receptor expression is taken from)
-  # Spot 2 is the sender (where the ligand expression is taken from)
   
   # How many of each interactions per cluster are there?
   # And between clusters
@@ -213,37 +217,225 @@ for (ITER in 1:c(length(samples))) {
   ))
   dev.off()
   
-  # DIFFERENTIAL CLUSTER ANALYSIS ----
+}
+
+#### PART 3: Re-load RDS objects for each sample and summarise with Chord plots ----
+
+# Run PART 1 before running this section
+# This can be run without re-running PART 2
+
+# Locate CSV files
+nInt_files <- list.files(path = '/Users/jamesboot/Documents/9.Genome Centre Files/GC-TM-10271/interactVis_trial',
+                       recursive = T,
+                       pattern = '_nInt_cluster.csv',
+                       full.names = T)
+
+# Load CSV files 
+nInt_objs <- lapply(nInt_files, function(x){
+  read.csv(x)[, 2:4]
+})
+
+# Names
+names(nInt_objs) <- samples
+
+# Set grid colours
+grid.col = c(
+  `1` = "#3366cc",
+  `2` = '#dc3911',
+  `3` = '#ff9900',
+  `4` = '#0d9618',
+  `5` = '#990099',
+  `6` = '#0099c5',
+  `7` = '#dd4477',
+  `8` = '#66a900',
+  `9` = '#b72e2f',
+  `10` = '#6633cc',
+  `11` = '#22a999',
+  `12` = '#306395',
+  `13` = '#aaaa11',
+  `14` = '#984499',
+  `15` = '#e67301',
+  `16` = '#8b0607',
+  `17` = '#339262',
+  `18` = '#3a3eac',
+  `19` = '#651066'
+)
+
+# Chord plot for each sample
+for (ITER in 1:length(nInt_objs)) {
+  tiff(
+    filename = paste0(base.dir, '/', samples[ITER], '/', samples[ITER], '_chord.tiff'),
+    height = 4,
+    width = 4,
+    units = 'in',
+    res = 300
+  )
+  circos.clear()
+  circos.par(gap.after = 5)
+  chordDiagram(nInt_objs[[ITER]], transparency = 0.5, grid.col = grid.col)
+  dev.off()
+}
+
+# Plot all samples together
+combined_df <- do.call(rbind, nInt_objs)
+tiff(
+  filename = paste0(base.dir, '/allSamples_chord.tiff'),
+  height = 4,
+  width = 4,
+  units = 'in',
+  res = 300
+)
+circos.clear()
+circos.par(gap.after = 5)
+chordDiagram(combined_df, transparency = 0.5, grid.col = grid.col)
+dev.off()
+
+# Plot Exp samples together
+sampleGroups <- read.csv('/Users/jamesboot/Documents/9.Genome Centre Files/GC-TM-10271/Tom_groups.csv')
+expSamples <- sampleGroups$Sample[sampleGroups$Group == 'Exp']
+combined_df <- do.call(rbind, nInt_objs[expSamples])
+tiff(
+  filename = paste0(base.dir, '/expSamples_chord.tiff'),
+  height = 4,
+  width = 4,
+  units = 'in',
+  res = 300
+)
+circos.clear()
+circos.par(gap.after = 5)
+chordDiagram(combined_df, transparency = 0.5, grid.col = grid.col)
+dev.off()
+
+# Plot Ctrl samples together
+sampleGroups <- read.csv('/Users/jamesboot/Documents/9.Genome Centre Files/GC-TM-10271/Tom_groups.csv')
+expSamples <- sampleGroups$Sample[sampleGroups$Group == 'Cnt']
+combined_df <- do.call(rbind, nInt_objs[expSamples])
+tiff(
+  filename = paste0(base.dir, '/ctrlSamples_chord.tiff'),
+  height = 4,
+  width = 4,
+  units = 'in',
+  res = 300
+)
+circos.clear()
+circos.par(gap.after = 5)
+chordDiagram(combined_df, transparency = 0.5, grid.col = grid.col)
+dev.off()
+  
+#### PART 4: Differential clusters analysis ----
+
+# Run PART 1 before running this section
+# This can be run without re-running PART 2 or 3
+
+# For loop to load and process all sample Seurat objects into list
+Seurat_objs <- list()
+for (ITER in 1:c(length(samples))) {
+  
+  # Load spatial data
+  Seurat_objs[[samples[ITER]]] <- Load10X_Spatial(
+    dirs[ITER],
+    filename = basename(files[ITER]),
+    assay = 'Spatial',
+    filter.matrix = TRUE,
+    to.upper = FALSE
+  )
+  
+  # Set the orig.ident to the sample name
+  Seurat_objs[[samples[ITER]]]$orig.ident <- samples[ITER]
+  
+  # Filter to only spots used by Tom in Partek
+  # Import the selected spots object for filtering to Tom's spots
+  selectedSpots <-
+    readRDS(
+      '/Users/jamesboot/Documents/9.Genome Centre Files/GC-TM-10271/stDeconvolve_exp_v_ctrl/pt1_local/selectedSpots.RDS'
+    )
+  
+  # Now filter each Seurat object in list for selected tissue spots
+  Seurat_objs[[samples[ITER]]] <-
+    subset(Seurat_objs[[samples[ITER]]], cells = selectedSpots$`Cell name`[selectedSpots$`Sample name` == unique(Seurat_objs[[samples[ITER]]]$orig.ident)])
+  
+  # Normalise data
+  Seurat_objs[[samples[ITER]]] <-
+    NormalizeData(Seurat_objs[[samples[ITER]]], normalization.method = "LogNormalize", verbose = FALSE)
+  
+  # Add cluster numbers from Partek
+  partekMeta <-
+    read.delim('/Users/jamesboot/Documents/9.Genome Centre Files/GC-TM-10271/exported.txt')
+  partekMetaFilt <-
+    partekMeta[partekMeta$Sample.name == samples[ITER],]
+  clustersMeta <- data.frame(
+    row.names = partekMetaFilt$Cell.name,
+    Cluster = as.factor(partekMetaFilt$Clusters..5comp.0.75res)
+  )
+  Seurat_objs[[samples[ITER]]] <- AddMetaData(Seurat_objs[[samples[ITER]]], clustersMeta)
+
+}
+
+# Locate RDS files of interaction results
+rds_files <- list.files(path = '/Users/jamesboot/Documents/9.Genome Centre Files/GC-TM-10271/interactVis_trial',
+                         recursive = T,
+                         pattern = '.rds',
+                         full.names = T)
+
+# Load RDS files 
+rds_objs <- lapply(rds_files, function(x){
+  readRDS(x)
+})
+
+# Names
+names(rds_objs) <- samples
+
+# Annotate the Interactions results with the cluster for spot 1 and spot 2
+# Spot 1 is the receiver (where the receptor expression is taken from)
+# Spot 2 is the sender (where the ligand expression is taken from)
+AnnoInt <- list()
+for (ITER in 1:c(length(samples))) {
+  AnnoInt[[samples[ITER]]] <-
+    annotateInteractions(
+      SeuratObj = Seurat_objs[[samples[ITER]]],
+      Interactions = rds_objs[[samples[ITER]]],
+      Attribute = 'Cluster'
+    )
+}
+
+# Loop to go through all samples and perform differential interaction
+AllDiffIntRes <- list()
+for (ITER in 1:c(length(samples))) {
   
   # Create Interaction Matrix
-  IntMat <- interactionMatrix(AnnoInt = diffIntDF)
+  # Function will create for both SENDERS and RECEIVERS
+  IntMat <- interactionMatrix(AnnoInt = AnnoInt[[samples[ITER]]])
   
   # Create differential interaction meta data from Partek meta data
+  # Function will create for both SENDERS and RECEIVERS
   diffIntMeta <- createMetaData(
-    SeuratObj = dat,
-    InteractionMat = IntMat,
+    SeuratObj = Seurat_objs[[samples[ITER]]],
+    InteractionMatList = IntMat,
     Attributes = c('orig.ident', 'Cluster')
   )
   
   # Perform differential interaction analysis
-  # Check there are at least 3 occurrences of each 2 and 10 in the meta data - if not move on
-  if (sum(diffIntMeta$Cluster == 2) > 3 & sum(diffIntMeta$Cluster == 10) > 3) {
-  
+  # Function will create for both SENDERS and RECEIVERS
+  # Function will also check there are enough replicates 
   diffInt2v10 <- differentialInteraction(
-    InteractionMat = IntMat,
-    Meta = diffIntMeta,
+    InteractionMatList = IntMat,
+    MetaList = diffIntMeta,
     Attribute = 'Cluster',
     Comparison = c(2, 10)
   )
   
-  write.csv(diffInt2v10,
-            file = paste0(base.dir, '/', samples[ITER], '/', samples[ITER], '_wilcox.csv'))
+  # Write RECEIVER results to file
+  write.csv(diffInt2v10$ReceiverResults,
+            file = paste0(base.dir, '/', samples[ITER], '/', samples[ITER], '_RECEIVER_wilcox.csv'))
   
-  } else {
-    
-    next
-    
-  }
+  # Write SENDER results to file
+  write.csv(diffInt2v10$SenderResults,
+            file = paste0(base.dir, '/', samples[ITER], '/', samples[ITER], '_SENDER_wilcox.csv'))
+  
+  # Write result for sample to list
+  AllDiffIntRes[[samples[ITER]]] <- diffInt2v10
   
 }
+  
+
 
