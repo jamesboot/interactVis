@@ -436,6 +436,90 @@ for (ITER in 1:c(length(samples))) {
   AllDiffIntRes[[samples[ITER]]] <- diffInt2v10
   
 }
+
+# Perform analysis on all samples merged together
+
+# AnnoInt contains annotated interactions for all samples - create copy
+AnnoIntv2 <- AnnoInt
+
+# Append sample names to barcodes before merging
+for (ITER in 1:c(length(AnnoIntv2))) {
+  AnnoIntv2[[ITER]]$spot1 <- paste0(AnnoIntv2[[ITER]]$spot1,
+                                    '-',
+                                    names(AnnoIntv2)[ITER])
   
+  AnnoIntv2[[ITER]]$spot2 <- paste0(AnnoIntv2[[ITER]]$spot2,
+                                    '-',
+                                    names(AnnoIntv2)[ITER])
+}
+
+# Bind all rows of all dataframes together
+AnnoInt_Comb <- do.call(rbind, AnnoIntv2)
+saveRDS(AnnoInt_Comb, 'allSamplesAnnoInt.rds')
+
+# Create Interaction Matrix
+# Function will create for both SENDERS and RECEIVERS
+AllIntMat <- interactionMatrix(AnnoInt = AnnoInt_Comb)
+saveRDS(AnnoInt_Comb, 'allSamplesIntMat.rds')
+
+# Create meta data
+
+# Change cell names
+for (ITER in 1:length(samples)) {
+  Seurat_objs[[ITER]] <- RenameCells(Seurat_objs[[ITER]],
+                                     new.names = paste0(Cells(Seurat_objs[[ITER]]),
+                                                        '-',
+                                                        samples[ITER]))
+}
+
+# Make one large seurat object for meta dtaa creation
+AllSampSeuratObj <- merge(Seurat_objs[[1]],
+                          y = c(
+                            Seurat_objs[[2]],
+                            Seurat_objs[[3]],
+                            Seurat_objs[[4]],
+                            Seurat_objs[[5]],
+                            Seurat_objs[[6]],
+                            Seurat_objs[[7]],
+                            Seurat_objs[[8]],
+                            Seurat_objs[[9]],
+                            Seurat_objs[[10]],
+                            Seurat_objs[[11]],
+                            Seurat_objs[[12]],
+                            Seurat_objs[[13]],
+                            Seurat_objs[[14]],
+                            Seurat_objs[[15]],
+                            Seurat_objs[[16]]
+                          ),
+                          project = "GC-TM-10271"
+)
+
+# Create differential interaction meta data from Partek meta data
+# Function will create for both SENDERS and RECEIVERS
+AllDiffIntMeta <- createMetaData(
+  SeuratObj = AllSampSeuratObj,
+  InteractionMatList = AllIntMat,
+  Attributes = c('orig.ident', 'Cluster')
+)
+
+# Now run diff interaction for all samples
+AllDiffInt2v10 <- differentialInteraction(
+  InteractionMatList = AllIntMat,
+  MetaList = AllDiffIntMeta,
+  Attribute = 'Cluster',
+  Comparison = c(2, 10)
+)
+
+# Write RECEIVER results to file
+write.csv(AllDiffInt2v10$ReceiverResults,
+          file = paste0(base.dir, '/', 'AllSamples_RECEIVER_wilcox.csv'))
+
+# Write SENDER results to file
+write.csv(AllDiffInt2v10$SenderResults,
+          file = paste0(base.dir, '/', 'AllSamples_SENDER_wilcox.csv'))
+
+# Save object
+saveRDS(AllDiffInt2v10, 'AllDiffInt2v10.rds')
+
 
 

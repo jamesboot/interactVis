@@ -15,8 +15,8 @@ interactionMatrix <- function(AnnoInt) {
   dumList <- list()
   
   # Create new receptor ligand column in AnnoInt
-  AnnoInt <- AnnoInt %>%
-    mutate(Receptor_Ligand = paste0(spot1_complex, '-', spot2_ligand))
+  AnnoInt <- AnnoInt %>% 
+    unite(Receptor_Ligand, c("spot1_complex", "spot2_ligand"), sep = "-", remove = FALSE)
   
   # For loop to go through each cell
   # Use dplyr to extract and summarise interaction scores for all receptor-ligands
