@@ -1,5 +1,7 @@
 # interactVis
 
+README last updated: 11/02/2024
+
 ## :dart: Aim
 - Perform receptor-ligand interaction analysis of 10X Visium spatial transcriptomics data - hence - interactVis
 - Find adjacent tissue spots where there is co-expression of receptors and ligands
