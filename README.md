@@ -15,7 +15,7 @@ The processing steps are performed in a similar manner to that described by Kauf
 4. Next interaction scores are determined for each tissue spot, and its immediate surrounding neighbours. Interaction scores are also calculated within a tissue spot. The interaction score is defined as the mean expression of receptor A and ligand B in tissue spot 1 and tissue spot 2 respectively. Receptor expression is taken from spot 1 – therefore spot 1 is the *receiver* of signalling, whilst ligand expression is always taken from spot 2; therefore spot 2 is the *sender* of signalling. This calculation processes is iterated across all tissue spots in combination with all neighbours of each tissue spot.
 5. Once interaction scores are calculated each tissue spot is annotated with its identity (e.g. cluster). 
 6. Interaction scores for a given cluster can then be extracted. Extracting interaction scores based on the spot 1 cluster annotation identifies the interaction scores that spots for a given cluster were *receiving*, whilst using the spot 2 cluster annotation identifies the interaction scores that spots for a given cluster were *sending*.
-7. Finally, interaction scores for each receptor-ligand pair detected are compared between two identities (e.g. cluster), in terms of both what each identity is *sending* and *receiving*. Interaction scores between clusters are compared using a Wilcoxon Test and p-values adjusted for multiple hypothesis testing using the Benjamini-Hochberg procedure.
+7. Finally, interaction scores for each receptor-ligand pair detected are compared between two identities (e.g. cluster), in terms of both what each identity is *sending* and *receiving*. Interaction scores between clusters are compared using a Wilcoxon Test OR negative bionmial GLM with log-likelihood ratio test, and p-values adjusted for multiple hypothesis testing using the Benjamini-Hochberg procedure.
 
 ## :pencil: Getting started
 Implementation of the functions and analysis can be found in `Analysis_MultiSample.R`, this also contains code for visualisations of results.
@@ -32,6 +32,7 @@ library(ComplexHeatmap)
 library(RColorBrewer)
 library(circlize)
 library(tidyr)
+library(lmtest)
 ```
 ### Load functions and database
 ```
@@ -119,7 +120,12 @@ chordDiagram(interactionSum, transparency = 0.5, grid.col = grid.col)
 - Second, create a metadata dataframe
   - Specify the Seurat object, the interaction matrix, and the attributes from the Seurat object you wish to add to the metadata dataframe.
 - Finally, perform differential interaction analysis
-  - Specify the interaction matrix, the metadata dataframe, the attribute name of the identities you want to compare, the two groups you want to compare.
+  - Specify the:
+    - Interaction matrix (InteractionMatList)
+    - Metadata dataframe (MetaList)
+    - Attribute name of the identities you want to compare (Attribute)
+    - Two groups you want to compare (Comparison)
+    - Test to be performed (Wilcoxon OR negative bionmial GLM with log-likelihood ratio test)  (Test)
 ```
 # Create Interaction Matrix
 # Function will create for both SENDERS and RECEIVERS
@@ -140,7 +146,8 @@ diffInt2v10 <- differentialInteraction(
   InteractionMatList = IntMat,
   MetaList = diffIntMeta,
   Attribute = 'Cluster',
-  Comparison = c(2, 10)
+  Comparison = c(2, 10),
+  Test = 'glm'
 )
 ```
 ## :page_with_curl: References
