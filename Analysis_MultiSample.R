@@ -12,6 +12,7 @@ library(tibble)
 library(ComplexHeatmap)
 library(RColorBrewer)
 library(circlize)
+library(tidyr)
 
 # Change working directory
 setwd('/Users/jamesboot/Documents/GitHub/')
