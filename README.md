@@ -1,6 +1,6 @@
 # interactVis
 
-README last updated: 11/02/2024
+README last updated: 06/05/2024
 
 ## :dart: Aim
 - Perform receptor-ligand interaction analysis of 10X Visium spatial transcriptomics data - hence - interactVis
