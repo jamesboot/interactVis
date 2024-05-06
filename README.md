@@ -31,6 +31,7 @@ library(tibble)
 library(ComplexHeatmap)
 library(RColorBrewer)
 library(circlize)
+library(tidyr)
 ```
 ### Load functions and database
 ```
