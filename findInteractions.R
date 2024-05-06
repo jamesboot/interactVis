@@ -9,7 +9,7 @@ calculateInteractions <- function(neighboursList,
   
   # Create vector containing the barcodes that are in the neighbors list and in the data (i.e. actual tissue spots)
   message('Creating vector of barcodes in neighbours list and in data object.')
-  select <- names(neighboursList)[names(neighboursList) %in% dat@assays$Spatial@counts@Dimnames[[2]]]
+  select <- names(neighboursList)[names(neighboursList) %in% Cells(dat)]
 
   # Get the scaled data in a dataframe
   message('Extracting scaled data.')
