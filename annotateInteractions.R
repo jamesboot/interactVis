@@ -8,33 +8,23 @@ annotateInteractions <- function(SeuratObj,
   # Retrieve results from Interactions 
   AnnoInt <- Interactions$Interactions
   
-  # Create empty columns for attribute to go in 
-  AnnoInt$Spot1_Anno <- NA
-  AnnoInt$Spot2_Anno <- NA
+  # Get metadata
+  meta <- data.frame(barcode = rownames(SeuratObj@meta.data),
+                     Attribute = SeuratObj@meta.data[Attribute])
   
-  # Go through all the spots and annotate
-  # Report progress
-  for (x in 1:nrow(AnnoInt)) {
-    message(paste0(
-      'Annotating interaction ',
-      x,
-      ' of ',
-      nrow(AnnoInt),
-      '. Progress: ',
-      round(((
-        x / nrow(AnnoInt)
-      ) * 100), digits = 1),
-      '%'
-    ))
-    AnnoInt$Spot1_Anno[x] <-
-      as.numeric(as.vector(SeuratObj@meta.data[, Attribute][colnames(SeuratObj) == AnnoInt$spot1[x]]))
-    AnnoInt$Spot2_Anno[x] <-
-      as.numeric(as.vector(SeuratObj@meta.data[, Attribute][colnames(SeuratObj) == AnnoInt$spot2[x]]))
-  }
+  # Annotate Senders
+  AnnoInt <- AnnoInt %>%
+    left_join(meta, by = c('Sender_bcode' = 'barcode'))
+  colnames(AnnoInt)[colnames(AnnoInt) == Attribute] <- 'Sender_Anno'
+  
+  # Annotate Receivers
+  AnnoInt <- AnnoInt %>%
+    left_join(meta, by = c('Receiver_bcode' = 'barcode'))
+  colnames(AnnoInt)[colnames(AnnoInt) == Attribute] <- 'Receiver_Anno'
   
   # Ensure annotations are factors
-  AnnoInt$Spot1_Anno <- as.factor(AnnoInt$Spot1_Anno)
-  AnnoInt$Spot2_Anno <- as.factor(AnnoInt$Spot2_Anno)
+  AnnoInt$Sender_Anno <- as.factor(AnnoInt$Sender_Anno)
+  AnnoInt$Receiver_Anno <- as.factor(AnnoInt$Receiver_Anno)
   
   # Return the dataframe 
   return(AnnoInt)
