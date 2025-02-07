@@ -30,8 +30,8 @@ differentialInteraction <- function(InteractionMatList,
     filter(!!as.symbol(Attribute) %in% Comparison)
   
   # Check if there are enough replicates of groups
-  if (sum(tTestDFFilt$Cluster == Comparison[1]) > 3 &
-      sum(tTestDFFilt$Cluster == Comparison[2]) > 3) {
+  if (sum(tTestDFFilt[Attribute] == Comparison[1]) > 3 &
+      sum(tTestDFFilt[Attribute] == Comparison[2]) > 3) {
     
     message('Starting statistical test for RECEIVERS.')
     
@@ -44,8 +44,7 @@ differentialInteraction <- function(InteractionMatList,
       # As data is not normally distributed - use wilcoxon
       res <-
         wilcox.test(tTestDFFilt[, x] ~ tTestDFFilt[, Attribute],
-                    data = tTestDFFilt,
-                    paired = F)
+                    data = tTestDFFilt)
       
       # Adjust the p-value
       FDR <-
@@ -88,8 +87,8 @@ differentialInteraction <- function(InteractionMatList,
     filter(!!as.symbol(Attribute) %in% Comparison)
   
   # Check if there are enough replicates of groups
-  if (sum(tTestDFFilt$Cluster == Comparison[1]) > 3 &
-      sum(tTestDFFilt$Cluster == Comparison[2]) > 3) {
+  if (sum(tTestDFFilt[Attribute] == Comparison[1]) > 3 &
+      sum(tTestDFFilt[Attribute] == Comparison[2]) > 3) {
     
     message('Starting statistical test for SENDERS.')
     
@@ -102,8 +101,7 @@ differentialInteraction <- function(InteractionMatList,
       # As data is not normally distributed - use wilcoxon
       res <-
         wilcox.test(tTestDFFilt[, x] ~ tTestDFFilt[, Attribute],
-                    data = tTestDFFilt,
-                    paired = F)
+                    data = tTestDFFilt)
       
       # Adjust the p-value
       FDR <-

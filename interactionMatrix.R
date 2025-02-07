@@ -11,42 +11,21 @@ interactionMatrix <- function(AnnoInt) {
   IntMatrices <- list()
   
   # 1. CREATE RECEIVER MATRIX: ----
-  # Make a dummy list
-  dumList <- list()
+  message('Creating receiver matrix...')
   
-  # Create new receptor ligand column in AnnoInt
-  AnnoInt <- AnnoInt %>% 
-    unite(Receptor_Ligand, c("spot1_complex", "spot2_ligand"), sep = "-", remove = FALSE)
+  # Use dplyr to pivot longer
+  tmp <- AnnoInt_Comb %>%
+    dplyr::select(Receiver_bcode, Receiver_expression, R_L_Name) %>%
+    pivot_wider(
+      names_from = Receiver_bcode,
+      values_from = Receiver_expression,
+      values_fn = function(x)
+        mean(x)
+    ) %>%
+    column_to_rownames('R_L_Name')
   
-  # For loop to go through each cell
-  # Use dplyr to extract and summarise interaction scores for all receptor-ligands
-  # Put the new dataframe for the spot into dummy list
-  c <- 1
-  for (bc in unique(AnnoInt$spot1)) {
-    message(paste0(
-      'Starting spot ',
-      c,
-      ' of ',
-      length(unique(AnnoInt$spot1)),
-      '. Progress: ',
-      round((c / length(
-        unique(AnnoInt$spot1)
-      ) * 100), digits = 1),
-      '%'
-    ))
-    int <- AnnoInt %>%
-      filter(spot1 == bc) %>%
-      group_by(Receptor_Ligand) %>%
-      summarise(Mean_Int = mean(interaction_score))
-    colnames(int)[2] <- bc
-    dumList[[bc]] <- int
-    c <- c + 1
-  }
-  
-  # Merge list elements
-  interactionMat <-
-    dumList %>% reduce(full_join, by = "Receptor_Ligand") %>%
-    column_to_rownames('Receptor_Ligand')
+  # Convert to matrix
+  interactionMat <- data.matrix(tmp)
   
   # Get rid of NAs
   interactionMat[is.na(interactionMat)] <- 0
@@ -55,43 +34,21 @@ interactionMatrix <- function(AnnoInt) {
   IntMatrices$ReceiverMat <- interactionMat
   
   # 3. CREATE SENDER MATRIX: ----
+  message('Creating sender matrix...')
   
-  # Make a dummy list
-  dumList <- list()
+  # Use dplyr to pivot longer
+  tmp <- AnnoInt_Comb %>%
+    dplyr::select(Sender_bcode, Sender_expression, R_L_Name) %>%
+    pivot_wider(
+      names_from = Sender_bcode,
+      values_from = Sender_expression,
+      values_fn = function(x)
+        mean(x)
+    ) %>%
+    column_to_rownames('R_L_Name')
   
-  # Create new receptor ligand column in AnnoInt
-  AnnoInt <- AnnoInt %>%
-    mutate(Receptor_Ligand = paste0(spot1_complex, '-', spot2_ligand))
-  
-  # For loop to go through each cell
-  # Use dplyr to extract and summarise interaction scores for all receptor-ligands
-  # Put the new dataframe for the spot into dummy list
-  c <- 1
-  for (bc in unique(AnnoInt$spot2)) {
-    message(paste0(
-      'Starting spot ',
-      c,
-      ' of ',
-      length(unique(AnnoInt$spot2)),
-      '. Progress: ',
-      round((c / length(
-        unique(AnnoInt$spot2)
-      ) * 100), digits = 1),
-      '%'
-    ))
-    int <- AnnoInt %>%
-      filter(spot2 == bc) %>%
-      group_by(Receptor_Ligand) %>%
-      summarise(Mean_Int = mean(interaction_score))
-    colnames(int)[2] <- bc
-    dumList[[bc]] <- int
-    c <- c + 1
-  }
-  
-  # Merge list elements
-  interactionMat <-
-    dumList %>% reduce(full_join, by = "Receptor_Ligand") %>%
-    column_to_rownames('Receptor_Ligand')
+  # Convert to matrix
+  interactionMat <- data.matrix(tmp)
   
   # Get rid of NAs
   interactionMat[is.na(interactionMat)] <- 0
